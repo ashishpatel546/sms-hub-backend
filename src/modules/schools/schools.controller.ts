@@ -1,16 +1,22 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Param,
+  BadRequestException,
   Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
   UploadedFile,
   UseGuards,
   UseInterceptors,
-  Delete,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { SchoolsService } from './schools.service';
 import { ServiceTokensService } from '../service-tokens/service-tokens.service';
 import { ServiceTokenGuard } from '../service-tokens/service-token.guard';
@@ -29,8 +35,6 @@ export class SchoolsController {
     private readonly schoolsService: SchoolsService,
     private readonly serviceTokensService: ServiceTokensService,
   ) {}
-
-  // ── School CRUD ──
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -59,30 +63,41 @@ export class SchoolsController {
     return this.schoolsService.findBySlug(slug);
   }
 
-  // ── Logo ──
-
   @Post(':slug/logo')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(HubUserRole.SYSTEM_ADMIN)
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload school logo to S3' })
+  @ApiOperation({ summary: 'Upload or replace a school logo in S3' })
   @UseInterceptors(FileInterceptor('logo'))
   uploadLogo(
     @Param('slug') slug: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
+    if (!file) {
+      throw new BadRequestException('Logo file is required');
+    }
+
     return this.schoolsService.uploadLogo(slug, file.buffer, file.originalname);
+  }
+
+  @Delete(':slug/logo')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(HubUserRole.SYSTEM_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete school logo from S3' })
+  deleteLogo(@Param('slug') slug: string) {
+    return this.schoolsService.deleteLogo(slug);
   }
 
   @Get(':slug/logo-url')
   @UseGuards(ServiceTokenGuard)
-  @ApiOperation({ summary: 'Get presigned logo URL — called by CI/CD pre-build script' })
+  @ApiOperation({
+    summary: 'Get presigned logo URL for CI/CD pre-build scripts',
+  })
   getLogoUrl(@Param('slug') slug: string) {
     return this.schoolsService.getLogoPresignedUrl(slug);
   }
-
-  // ── School Admin User ──
 
   @Post(':slug/admin')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -95,8 +110,6 @@ export class SchoolsController {
   ) {
     return this.schoolsService.createSchoolAdmin(slug, dto);
   }
-
-  // ── Service Tokens ──
 
   @Get(':slug/tokens')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -120,9 +133,7 @@ export class SchoolsController {
   ) {
     return this.schoolsService
       .findBySlug(slug)
-      .then((school) =>
-        this.serviceTokensService.generate(school.id, dto.label),
-      );
+      .then((school) => this.serviceTokensService.generate(school.id, dto.label));
   }
 
   @Delete(':slug/tokens/:tokenId')

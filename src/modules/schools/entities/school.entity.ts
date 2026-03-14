@@ -21,8 +21,8 @@ export class School {
   @Column({ unique: true })
   slug: string;
 
-  @Column({ nullable: true })
-  s3LogoKey: string;
+  @Column({ type: 'varchar', nullable: true })
+  s3LogoKey: string | null;
 
   @Column({
     type: 'enum',

@@ -1,11 +1,11 @@
 import {
-  Injectable,
-  NotFoundException,
   ConflictException,
+  Injectable,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { School } from './entities/school.entity';
 import { HubUsersService } from '../hub-users/hub-users.service';
 import { HubUserRole } from '../hub-users/entities/hub-user.entity';
@@ -13,12 +13,6 @@ import { S3Service } from '../s3/s3.service';
 import { GithubActionsService } from './github-actions.service';
 import { CreateSchoolDto } from './dto/create-school.dto';
 import { CreateSchoolAdminDto } from './dto/create-school-admin.dto';
-import { TenantProvisioningService } from './tenant-provisioning.service';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as path from 'path';
-
-const execAsync = promisify(exec);
 
 @Injectable()
 export class SchoolsService {
@@ -30,7 +24,6 @@ export class SchoolsService {
     private readonly hubUsersService: HubUsersService,
     private readonly s3Service: S3Service,
     private readonly dataSource: DataSource,
-    private readonly tenantProvisioningService: TenantProvisioningService,
     private readonly githubActionsService: GithubActionsService
   ) {}
 
@@ -40,66 +33,49 @@ export class SchoolsService {
 
   async findBySlug(slug: string): Promise<School> {
     const school = await this.schoolRepository.findOne({ where: { slug } });
-    if (!school) throw new NotFoundException(`School '${slug}' not found`);
+    if (!school) {
+      throw new NotFoundException(`School '${slug}' not found`);
+    }
+
     return school;
   }
 
   async create(dto: CreateSchoolDto): Promise<School> {
-    const existing = await this.schoolRepository.findOne({
+    const existingSchool = await this.schoolRepository.findOne({
       where: { slug: dto.slug },
     });
-    if (existing) {
+    if (existingSchool) {
       throw new ConflictException(`Slug '${dto.slug}' is already taken`);
     }
 
-    // 1. Create the schema for the school
-    this.logger.log(`Creating schema for school: ${dto.slug}`);
-    await this.dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${dto.slug}"`);
+    const existingSchema = await this.dataSource.query(
+      'SELECT schema_name FROM information_schema.schemata WHERE schema_name = $1',
+      [dto.slug]
+    );
+    if (existingSchema.length > 0) {
+      throw new ConflictException(
+        `Schema '${dto.slug}' already exists. Please use a different slug.`
+      );
+    }
 
-    // 2. Save school record
+    await this.createSchoolSchema(dto.slug);
+
     const school = this.schoolRepository.create({
       name: dto.name,
       slug: dto.slug,
     });
-    const savedSchool = await this.schoolRepository.save(school);
 
-    // 3. Run migrations for the new schema
-    this.logger.log(`Running migrations for schema: ${dto.slug}`);
+    let savedSchool: School;
     try {
-      const backendPath = path.join(process.cwd(), '../backend');
-      const { stdout, stderr } = await execAsync('npm run migration:run', {
-        cwd: backendPath,
-        env: {
-          ...process.env,
-          DB_SCHEMA: dto.slug,
-        },
-      });
-      this.logger.log(`Migrations output for ${dto.slug}: ${stdout}`);
-      if (stderr) {
-        this.logger.warn(`Migrations stderr for ${dto.slug}: ${stderr}`);
-      }
+      savedSchool = await this.schoolRepository.save(school);
     } catch (error) {
-      this.logger.error(
-        `Failed to run migrations for schema ${dto.slug}`,
-        error.stack
-      );
-      // We don't throw an error here to prevent rolling back the school creation,
-      // but you might want to handle it differently in production.
+      await this.dropSchoolSchema(dto.slug);
+      throw error;
     }
 
-    // 4. Provision Docker Infrastructure via Compose & S3 Sync
-    try {
-      this.logger.log(`Provisioning Docker infrastructure for ${dto.slug}`);
-      await this.tenantProvisioningService.provisionSchoolInfrastructure(
-        dto.slug,
-        dto.name
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to provision infrastructure for ${dto.slug}: ${error.message}`
-      );
-      // Infrastructure failure should be logged but shouldn't necessarily fail the DB transaction
-    }
+    this.logger.log(
+      `School '${dto.slug}' created. Deploy sms-backend with DB_SCHEMA=${dto.slug} and run migrations to complete setup.`
+    );
 
     return savedSchool;
   }
@@ -110,23 +86,36 @@ export class SchoolsService {
     originalName: string
   ): Promise<School> {
     const school = await this.findBySlug(slug);
+    const previousKey = school.s3LogoKey;
     const s3Key = await this.s3Service.uploadLogo(
       slug,
       fileBuffer,
       originalName
     );
+
+    if (previousKey && previousKey !== s3Key) {
+      await this.s3Service.deleteObject(previousKey);
+    }
+
     school.s3LogoKey = s3Key;
-    const saved = await this.schoolRepository.save(school);
+    const savedSchool = await this.schoolRepository.save(school);
+    this.triggerFrontendRebuild(slug);
 
-    // Trigger a frontend rebuild in CI so PWA icons are regenerated with the new logo.
-    // This is fire-and-forget — a failure here should not block the logo upload response.
-    this.githubActionsService
-      .triggerFrontendRebuild(slug)
-      .catch((err) =>
-        this.logger.error(`Could not trigger frontend rebuild for ${slug}`, err)
-      );
+    return savedSchool;
+  }
 
-    return saved;
+  async deleteLogo(slug: string): Promise<School> {
+    const school = await this.findBySlug(slug);
+    if (!school.s3LogoKey) {
+      throw new NotFoundException(`No logo uploaded for school '${slug}'`);
+    }
+
+    await this.s3Service.deleteObject(school.s3LogoKey);
+    school.s3LogoKey = null;
+    const savedSchool = await this.schoolRepository.save(school);
+    this.triggerFrontendRebuild(slug);
+
+    return savedSchool;
   }
 
   async getLogoPresignedUrl(slug: string): Promise<{ presignedUrl: string }> {
@@ -134,6 +123,7 @@ export class SchoolsService {
     if (!school.s3LogoKey) {
       throw new NotFoundException(`No logo uploaded for school '${slug}'`);
     }
+
     const presignedUrl = await this.s3Service.getPresignedUrl(school.s3LogoKey);
     return { presignedUrl };
   }
@@ -146,11 +136,33 @@ export class SchoolsService {
       role: HubUserRole.SCHOOL_OWNER,
       schoolId: school.id,
     });
+
     return {
       id: user.id,
       email: user.email,
       role: user.role,
       schoolId: user.schoolId,
     };
+  }
+
+  private async createSchoolSchema(slug: string): Promise<void> {
+    this.logger.log(`Creating schema for school: ${slug}`);
+    await this.dataSource.query(`CREATE SCHEMA "${slug}"`);
+  }
+
+  private async dropSchoolSchema(slug: string): Promise<void> {
+    this.logger.warn(`Dropping schema for school: ${slug}`);
+    await this.dataSource.query(`DROP SCHEMA IF EXISTS "${slug}" CASCADE`);
+  }
+
+  private triggerFrontendRebuild(slug: string): void {
+    this.githubActionsService
+      .triggerFrontendRebuild(slug)
+      .catch((error) =>
+        this.logger.error(
+          `Could not trigger frontend rebuild for ${slug}`,
+          error
+        )
+      );
   }
 }
