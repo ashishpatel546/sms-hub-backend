@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { validate } from './common/config/env.validation';
+import { GlobalConfigModule } from './common/config/global-config.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HubUsersModule } from './modules/hub-users/hub-users.module';
 import { S3Module } from './modules/s3/s3.module';
@@ -13,9 +13,8 @@ import { SeederModule } from './modules/seeder/seeder.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      validate,
-      envFilePath: '.env',
     }),
+    GlobalConfigModule,
     DatabaseModule,
     S3Module,
     AuthModule,
