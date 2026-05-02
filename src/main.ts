@@ -5,8 +5,11 @@ import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import { setupSwagger } from './common/swagger-setup';
 import { loadAwsSsmParams } from './common/config/setup-aws-ssm';
+import * as dotenv from 'dotenv';
 
 async function bootstrap() {
+  // Load .env first so FORCE_AWS_SSM and NODE_ENV are available to loadAwsSsmParams
+  dotenv.config();
   await loadAwsSsmParams();
   const app = await NestFactory.create(AppModule, { rawBody: true });
   const configService = app.get(ConfigService);
