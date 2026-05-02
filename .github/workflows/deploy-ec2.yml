@@ -49,6 +49,7 @@ jobs:
             # Create/Update .env file without pipeline secrets
             if [ "${{ env.APP_ENV }}" = "development" ]; then
               echo "NODE_ENV=development" > .env
+              echo "FORCE_AWS_SSM=true" >> .env
             else
               echo "NODE_ENV=production" > .env
             fi
