@@ -3,18 +3,18 @@ name: Deploy Hub Backend to EC2
 on:
   push:
     branches:
-      - stage
+      - development
       - main
   workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  APP_ENV: ${{ github.ref == 'refs/heads/stage' && 'development' || 'production' }}
+  APP_ENV: ${{ github.ref == 'refs/heads/development' && 'development' || 'production' }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/stage' && 'development' || 'production' }}
+    environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'production' }}
 
     steps:
       - name: Checkout code
