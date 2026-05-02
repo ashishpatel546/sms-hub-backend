@@ -19,14 +19,12 @@ export class HubUsersService {
     email: string;
     password: string;
     role: HubUserRole;
-    schoolId?: number;
   }): Promise<HubUser> {
     const passwordHash = await bcrypt.hash(data.password, 10);
     const user = this.hubUsersRepository.create({
       email: data.email,
       passwordHash,
       role: data.role,
-      schoolId: data.schoolId ?? null,
     });
     return this.hubUsersRepository.save(user);
   }

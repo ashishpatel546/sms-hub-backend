@@ -15,7 +15,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         username: configService.get<string>('DB_USERNAME'),
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_DATABASE'),
-        schema: 'colegios',
         autoLoadEntities: true,
         logging: configService.get<boolean>('DB_LOGGING'),
         synchronize: configService.get<boolean>('DB_SYNCHRONIZE'),

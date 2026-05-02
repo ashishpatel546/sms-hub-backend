@@ -4,8 +4,10 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import { setupSwagger } from './common/swagger-setup';
+import { loadAwsSsmParams } from './common/config/setup-aws-ssm';
 
 async function bootstrap() {
+  await loadAwsSsmParams();
   const app = await NestFactory.create(AppModule, { rawBody: true });
   const configService = app.get(ConfigService);
 

@@ -25,7 +25,6 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
-      schoolId: user.schoolId,
     };
 
     if (user.isFirstLogin) {
