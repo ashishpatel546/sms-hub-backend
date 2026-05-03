@@ -76,4 +76,12 @@ export class EnvDto {
 
   @IsString()
   AWS_S3_BUCKET: string;
+
+  @IsString()
+  @IsOptional()
+  HUB_SYSTEM_ADMIN_EMAIL: string;
+
+  @IsString()
+  @IsOptional()
+  HUB_SYSTEM_ADMIN_PASSWORD: string;
 }

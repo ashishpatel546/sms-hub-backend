@@ -14,14 +14,18 @@ export const loadAwsSsmParams = async (): Promise<void> => {
     process.env.NODE_ENV === 'development';
 
   if (isLocal && !process.env.FORCE_AWS_SSM) {
-    logger.log('📄 Using local environment config (AWS SSM skipped due to local environment)');
+    logger.log(
+      '📄 Using local environment config (AWS SSM skipped due to local environment)',
+    );
     return;
   }
 
   const env = process.env.NODE_ENV || 'development';
   const platformPath = `/sms-hub/${env}/`;
 
-  logger.log(`🔄 Loading platform environment variables from AWS SSM at [${platformPath}]...`);
+  logger.log(
+    `🔄 Loading platform environment variables from AWS SSM at [${platformPath}]...`,
+  );
 
   const ssmClient = new SSMClient({
     region: process.env.AWS_REGION || 'ap-south-1',
@@ -59,7 +63,9 @@ export const loadAwsSsmParams = async (): Promise<void> => {
       process.env[envKey] = param.Value;
     });
 
-    logger.log(`✅ SSM environment variables loaded: ${platformParams.length} params from ${platformPath}`);
+    logger.log(
+      `✅ SSM environment variables loaded: ${platformParams.length} params from ${platformPath}`,
+    );
   } catch (error) {
     logger.error('❌ Failed to pull variables from AWS SSM', error);
     throw error;
