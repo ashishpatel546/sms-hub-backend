@@ -84,4 +84,14 @@ export class EnvDto {
   @IsString()
   @IsOptional()
   HUB_SYSTEM_ADMIN_PASSWORD: string;
+
+  /** URL of the school-ai FastAPI service (e.g. http://localhost:8001) */
+  @IsString()
+  @IsOptional()
+  AI_BACKEND_URL: string = 'http://localhost:8001';
+
+  /** Shared secret matching school-ai's INTERNAL_API_KEY env var */
+  @IsString()
+  @IsOptional()
+  AI_INTERNAL_KEY: string = '';
 }
