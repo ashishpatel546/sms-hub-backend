@@ -18,9 +18,14 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { HubUserRole } from '../hub-users/entities/hub-user.entity';
 import { AiAdminService } from './ai-admin.service';
 import {
+  CreateLlmTierDto,
   CreatePlanDto,
   GrantCreditsDto,
   GrantPlanDto,
+  UpdateAllowedModelsDto,
+  UpdateFeatureRolesDto,
+  UpdateLlmPricingDto,
+  UpdateLlmTiersDto,
   UpdatePlanDto,
   UpdateSettingDto,
 } from './dto/ai-admin.dto';
@@ -104,5 +109,70 @@ export class AiAdminController {
   @ApiOperation({ summary: 'Update a platform setting' })
   updateSetting(@Param('key') key: string, @Body() dto: UpdateSettingDto) {
     return this.svc.updateSetting(key, dto);
+  }
+
+  // ── LLM model tiers ────────────────────────────────────────────────────────
+
+  @Get('llm-tiers')
+  @ApiOperation({ summary: 'Get LLM provider/model config per tier' })
+  getLlmTiers() {
+    return this.svc.getLlmTiers();
+  }
+
+  @Put('llm-tiers')
+  @ApiOperation({ summary: 'Update LLM provider/model config per tier' })
+  updateLlmTiers(@Body() dto: UpdateLlmTiersDto) {
+    return this.svc.updateLlmTiers(dto);
+  }
+
+  @Post('llm-tiers')
+  @ApiOperation({ summary: 'Create a new model tier' })
+  createLlmTier(@Body() dto: CreateLlmTierDto) {
+    return this.svc.createLlmTier(dto);
+  }
+
+  @Delete('llm-tiers/:tierId')
+  @ApiOperation({ summary: 'Delete a model tier (must be unused by any plan)' })
+  deleteLlmTier(@Param('tierId') tierId: string) {
+    return this.svc.deleteLlmTier(tierId);
+  }
+
+  @Get('llm-models')
+  @ApiOperation({ summary: 'List live models from a provider + allowed shortlist' })
+  listLlmModels(
+    @Query('provider') provider: string,
+    @Query('refresh') refresh?: string,
+  ) {
+    return this.svc.listLlmModels(provider, refresh === 'true');
+  }
+
+  @Put('llm-models')
+  @ApiOperation({ summary: 'Update the allowed model shortlist for a provider' })
+  updateAllowedModels(@Body() dto: UpdateAllowedModelsDto) {
+    return this.svc.updateAllowedModels(dto);
+  }
+
+  @Get('llm-pricing')
+  @ApiOperation({ summary: 'Get per-model pricing map and USD→INR rate' })
+  getLlmPricing() {
+    return this.svc.getLlmPricing();
+  }
+
+  @Put('llm-pricing')
+  @ApiOperation({ summary: 'Update per-model pricing map and USD→INR rate' })
+  updateLlmPricing(@Body() dto: UpdateLlmPricingDto) {
+    return this.svc.updateLlmPricing(dto);
+  }
+
+  @Get('feature-roles')
+  @ApiOperation({ summary: 'Get feature → allowed roles map' })
+  getFeatureRoles() {
+    return this.svc.getFeatureRoles();
+  }
+
+  @Put('feature-roles')
+  @ApiOperation({ summary: 'Update feature → allowed roles map' })
+  updateFeatureRoles(@Body() dto: UpdateFeatureRolesDto) {
+    return this.svc.updateFeatureRoles(dto);
   }
 }

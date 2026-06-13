@@ -1,4 +1,13 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GrantCreditsDto {
@@ -44,6 +53,11 @@ export class CreatePlanDto {
   @ApiPropertyOptional({ type: Object })
   @IsOptional()
   features?: Record<string, boolean>;
+
+  @ApiPropertyOptional({ description: 'AI model tier (1=Basic, 2=Standard, 3=Advanced)' })
+  @IsOptional()
+  @IsInt()
+  model_tier?: number;
 }
 
 export class UpdatePlanDto {
@@ -68,6 +82,83 @@ export class UpdatePlanDto {
   @ApiPropertyOptional()
   @IsOptional()
   is_active?: boolean;
+
+  @ApiPropertyOptional({ description: 'AI model tier (1=Basic, 2=Standard, 3=Advanced)' })
+  @IsOptional()
+  @IsInt()
+  model_tier?: number;
+}
+
+export class UpdateLlmTiersDto {
+  @ApiProperty({
+    description: 'Map of tier number → { provider, model, label?, description? }',
+    example: { '1': { provider: 'gemini', model: 'gemini-2.0-flash-lite', label: 'Basic', description: 'Cheapest model' } },
+  })
+  @IsObject()
+  tiers: Record<string, { provider: string; model: string; label?: string; description?: string }>;
+}
+
+export class CreateLlmTierDto {
+  @ApiProperty({ description: 'Display label for the new tier', example: 'Premium' })
+  @IsString()
+  @IsNotEmpty()
+  label: string;
+
+  @ApiPropertyOptional({ description: 'Short description shown to admins' })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiProperty({ enum: ['gemini', 'openai', 'anthropic'] })
+  @IsString()
+  @IsNotEmpty()
+  provider: string;
+
+  @ApiProperty({ description: 'Model id for this tier', example: 'gemini-2.5-pro' })
+  @IsString()
+  @IsNotEmpty()
+  model: string;
+}
+
+export class UpdateAllowedModelsDto {
+  @ApiProperty({ enum: ['gemini', 'openai', 'anthropic'] })
+  @IsString()
+  @IsNotEmpty()
+  provider: string;
+
+  @ApiProperty({ type: [String], description: 'Allowed model ids for this provider' })
+  @IsArray()
+  @IsString({ each: true })
+  models: string[];
+}
+
+export class UpdateLlmPricingDto {
+  @ApiProperty({
+    description: 'Map of model id → { input, output } in USD per million tokens',
+    example: { 'gemini-2.5-flash': { input: 0.3, output: 2.5 } },
+  })
+  @IsObject()
+  pricing: Record<string, { input: number; output: number }>;
+
+  @ApiPropertyOptional({ description: 'USD → INR conversion rate' })
+  @IsOptional()
+  @IsNumber()
+  usd_to_inr_rate?: number;
+
+  @ApiPropertyOptional({ description: 'Tokens consumed per credit' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  tokens_per_credit?: number;
+}
+
+export class UpdateFeatureRolesDto {
+  @ApiProperty({
+    description: 'Map of feature key → allowed AI roles (student/teacher)',
+    example: { explain_topic: ['student', 'teacher'] },
+  })
+  @IsObject()
+  feature_roles: Record<string, string[]>;
 }
 
 export class UpdateSettingDto {
