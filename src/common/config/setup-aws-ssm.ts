@@ -35,7 +35,7 @@ export const loadAwsSsmParams = async (): Promise<void> => {
     const fetchParams = async (path: string): Promise<Parameter[]> => {
       let nextToken: string | undefined = undefined;
       const allParams: Parameter[] = [];
-      /* eslint-disable no-await-in-loop */
+
       do {
         const command = new GetParametersByPathCommand({
           Path: path,
@@ -49,7 +49,6 @@ export const loadAwsSsmParams = async (): Promise<void> => {
         }
         nextToken = response.NextToken;
       } while (nextToken);
-      /* eslint-enable no-await-in-loop */
 
       return allParams;
     };
