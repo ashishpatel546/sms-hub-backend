@@ -72,9 +72,15 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            # Abort the deploy on ANY failing command below. Without this, a
+            # failed migration fell through to the PM2 restart and the
+            # pipeline still went green — which is how stage ran for months
+            # with migrations silently never applying.
+            set -e
+
             # Explicitly load Node/NVM in this non-interactive shell
             export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh"; fi
             export PATH=$PATH:/usr/local/bin
 
             DIR_NAME="sms-hub-backend-${{ env.APP_ENV }}"
