@@ -70,7 +70,9 @@ export class AiAdminService {
             : typeof detail === 'string'
               ? detail
               : JSON.stringify(detail);
-          throw new BadRequestException(message || `AI backend returned ${res.status}`);
+          throw new BadRequestException(
+            message || `AI backend returned ${res.status}`,
+          );
         }
         throw new InternalServerErrorException(
           `AI backend returned ${res.status}: ${text}`,
@@ -155,7 +157,10 @@ export class AiAdminService {
   }
 
   listLlmModels(provider: string, refresh = false) {
-    const qs = new URLSearchParams({ provider, ...(refresh && { refresh: 'true' }) });
+    const qs = new URLSearchParams({
+      provider,
+      ...(refresh && { refresh: 'true' }),
+    });
     return this.call('GET', `/hub/llm-models?${qs}`);
   }
 

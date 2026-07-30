@@ -29,8 +29,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
       // Only allow auth/change-password and auth/me
       const isAllowed =
-        (className === 'AuthController' &&
-          (handlerName === 'changePassword' || handlerName === 'me'));
+        className === 'AuthController' &&
+        (handlerName === 'changePassword' || handlerName === 'me');
 
       if (!isAllowed) {
         return false;

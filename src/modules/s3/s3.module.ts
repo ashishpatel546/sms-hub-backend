@@ -12,7 +12,7 @@ import { S3Service } from './s3.service';
       useFactory: (configService: ConfigService) => ({
         awsS3Accesskey: configService.get<string>('AWS_ACCESS_KEY_ID'),
         awsS3SecretKey: configService.get<string>('AWS_SECRET_ACCESS_KEY'),
-        awsS3Region: configService.get<string>('AWS_REGION', 'ap-south-1')!,
+        awsS3Region: configService.get<string>('AWS_REGION', 'ap-south-1'),
         awsS3Bucket: configService.get<string>('AWS_S3_BUCKET')!,
       }),
     }),

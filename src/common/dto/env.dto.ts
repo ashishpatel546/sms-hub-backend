@@ -60,6 +60,15 @@ export class EnvDto {
   @IsOptional()
   JWT_EXPIRES_IN: string = '8h';
 
+  /**
+   * Lifetime of the `hub_refresh_token` row, not of a JWT. Kept long so the
+   * console survives overnight; the access token above stays short because
+   * `sms-backend` honours it on every `/admin/*` route.
+   */
+  @IsString()
+  @IsOptional()
+  JWT_REFRESH_EXPIRES_IN: string = '30d';
+
   @IsString()
   @IsOptional()
   WHITELIST_TRUSTED_URLS: string = '*';

@@ -54,7 +54,9 @@ export class CreatePlanDto {
   @IsOptional()
   features?: Record<string, boolean>;
 
-  @ApiPropertyOptional({ description: 'AI model tier (1=Basic, 2=Standard, 3=Advanced)' })
+  @ApiPropertyOptional({
+    description: 'AI model tier (1=Basic, 2=Standard, 3=Advanced)',
+  })
   @IsOptional()
   @IsInt()
   model_tier?: number;
@@ -83,7 +85,9 @@ export class UpdatePlanDto {
   @IsOptional()
   is_active?: boolean;
 
-  @ApiPropertyOptional({ description: 'AI model tier (1=Basic, 2=Standard, 3=Advanced)' })
+  @ApiPropertyOptional({
+    description: 'AI model tier (1=Basic, 2=Standard, 3=Advanced)',
+  })
   @IsOptional()
   @IsInt()
   model_tier?: number;
@@ -91,15 +95,29 @@ export class UpdatePlanDto {
 
 export class UpdateLlmTiersDto {
   @ApiProperty({
-    description: 'Map of tier number → { provider, model, label?, description? }',
-    example: { '1': { provider: 'gemini', model: 'gemini-2.0-flash-lite', label: 'Basic', description: 'Cheapest model' } },
+    description:
+      'Map of tier number → { provider, model, label?, description? }',
+    example: {
+      '1': {
+        provider: 'gemini',
+        model: 'gemini-2.0-flash-lite',
+        label: 'Basic',
+        description: 'Cheapest model',
+      },
+    },
   })
   @IsObject()
-  tiers: Record<string, { provider: string; model: string; label?: string; description?: string }>;
+  tiers: Record<
+    string,
+    { provider: string; model: string; label?: string; description?: string }
+  >;
 }
 
 export class CreateLlmTierDto {
-  @ApiProperty({ description: 'Display label for the new tier', example: 'Premium' })
+  @ApiProperty({
+    description: 'Display label for the new tier',
+    example: 'Premium',
+  })
   @IsString()
   @IsNotEmpty()
   label: string;
@@ -114,7 +132,10 @@ export class CreateLlmTierDto {
   @IsNotEmpty()
   provider: string;
 
-  @ApiProperty({ description: 'Model id for this tier', example: 'gemini-2.5-pro' })
+  @ApiProperty({
+    description: 'Model id for this tier',
+    example: 'gemini-2.5-pro',
+  })
   @IsString()
   @IsNotEmpty()
   model: string;
@@ -126,7 +147,10 @@ export class UpdateAllowedModelsDto {
   @IsNotEmpty()
   provider: string;
 
-  @ApiProperty({ type: [String], description: 'Allowed model ids for this provider' })
+  @ApiProperty({
+    type: [String],
+    description: 'Allowed model ids for this provider',
+  })
   @IsArray()
   @IsString({ each: true })
   models: string[];
@@ -134,7 +158,8 @@ export class UpdateAllowedModelsDto {
 
 export class UpdateLlmPricingDto {
   @ApiProperty({
-    description: 'Map of model id → { input, output } in USD per million tokens',
+    description:
+      'Map of model id → { input, output } in USD per million tokens',
     example: { 'gemini-2.5-flash': { input: 0.3, output: 2.5 } },
   })
   @IsObject()

@@ -15,8 +15,7 @@ const createDataSource = async () => {
     password: process.env.DB_PASSWORD,
     database: process.env.DB_DATABASE,
     // RDS enforces SSL (rds.force_ssl=1); harmless off for local Postgres.
-    ssl:
-      process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
     synchronize: process.env.DB_SYNCHRONIZE === 'true',
     logging: process.env.DB_LOGGING === 'true',
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
