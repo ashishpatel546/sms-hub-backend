@@ -11,8 +11,9 @@ coverage/
 *.log
 .gemini/
 docs/
-!README.md
 *.md
+!README.md
+!CLAUDE.md
 *.txt
 scripts/
 .env.*

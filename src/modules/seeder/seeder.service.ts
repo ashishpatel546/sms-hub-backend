@@ -18,10 +18,14 @@ export class SeederService implements OnApplicationBootstrap {
 
   private async seedSystemAdmin() {
     const email = this.configService.get<string>('HUB_SYSTEM_ADMIN_EMAIL');
-    const password = this.configService.get<string>('HUB_SYSTEM_ADMIN_PASSWORD');
+    const password = this.configService.get<string>(
+      'HUB_SYSTEM_ADMIN_PASSWORD',
+    );
 
     if (!email || !password) {
-      this.logger.error('HUB_SYSTEM_ADMIN_EMAIL or HUB_SYSTEM_ADMIN_PASSWORD not set in .env');
+      this.logger.error(
+        'HUB_SYSTEM_ADMIN_EMAIL or HUB_SYSTEM_ADMIN_PASSWORD not set in .env',
+      );
       return;
     }
 

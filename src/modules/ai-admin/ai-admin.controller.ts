@@ -138,7 +138,9 @@ export class AiAdminController {
   }
 
   @Get('llm-models')
-  @ApiOperation({ summary: 'List live models from a provider + allowed shortlist' })
+  @ApiOperation({
+    summary: 'List live models from a provider + allowed shortlist',
+  })
   listLlmModels(
     @Query('provider') provider: string,
     @Query('refresh') refresh?: string,
@@ -147,7 +149,9 @@ export class AiAdminController {
   }
 
   @Put('llm-models')
-  @ApiOperation({ summary: 'Update the allowed model shortlist for a provider' })
+  @ApiOperation({
+    summary: 'Update the allowed model shortlist for a provider',
+  })
   updateAllowedModels(@Body() dto: UpdateAllowedModelsDto) {
     return this.svc.updateAllowedModels(dto);
   }
