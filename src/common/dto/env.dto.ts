@@ -94,6 +94,16 @@ export class EnvDto {
   @IsOptional()
   HUB_SYSTEM_ADMIN_PASSWORD: string;
 
+  /**
+   * Bootstrap password handed to a newly invited hub user, and the value a
+   * password reset drops an account back to. Never returned by the API —
+   * `isFirstLogin` forces a change on the next sign-in, so this only has to
+   * survive the walk from one admin to another.
+   */
+  @IsString()
+  @IsOptional()
+  HUB_DEFAULT_PASSWORD: string = '123456';
+
   /** URL of the school-ai FastAPI service (e.g. http://localhost:8001) */
   @IsString()
   @IsOptional()
