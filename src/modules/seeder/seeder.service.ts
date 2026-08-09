@@ -1,7 +1,10 @@
 import { Injectable, OnApplicationBootstrap, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HubUsersService } from '../hub-users/hub-users.service';
-import { HubUserRole } from '../hub-users/entities/hub-user.entity';
+import {
+  HubAccessLevel,
+  HubUserRole,
+} from '../hub-users/entities/hub-user.entity';
 
 @Injectable()
 export class SeederService implements OnApplicationBootstrap {
@@ -38,6 +41,10 @@ export class SeederService implements OnApplicationBootstrap {
       email,
       password,
       role: HubUserRole.SYSTEM_ADMIN,
+      // Explicit: the column defaults to VIEW (least privilege for invited
+      // users), but the bootstrap admin is the one account that has to be
+      // able to invite everybody else.
+      accessLevel: HubAccessLevel.ADMIN,
     });
 
     this.logger.log('++++++++++++++++++++++++++++++++++++++++++++++++++++++++');

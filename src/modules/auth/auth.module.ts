@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -9,7 +9,10 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
+import { HubAccessGuard } from './hub-access.guard';
+import { TotpService } from './totp.service';
 import { HubUsersModule } from '../hub-users/hub-users.module';
+import { assertHubCapabilitiesValid } from './hub-capabilities';
 
 @Module({
   imports: [
@@ -31,7 +34,31 @@ import { HubUsersModule } from '../hub-users/hub-users.module';
     TypeOrmModule.forFeature([HubRefreshToken]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard],
-  exports: [AuthService, JwtModule, JwtAuthGuard, RolesGuard],
+  providers: [
+    AuthService,
+    TotpService,
+    JwtStrategy,
+    JwtAuthGuard,
+    RolesGuard,
+    HubAccessGuard,
+  ],
+  exports: [
+    AuthService,
+    TotpService,
+    JwtModule,
+    JwtAuthGuard,
+    RolesGuard,
+    HubAccessGuard,
+  ],
 })
-export class AuthModule {}
+export class AuthModule implements OnModuleInit {
+  /**
+   * Anti-drift check for `HUB_CAPABILITIES`, run once at boot. Cheap (a dozen
+   * string comparisons) and non-fatal — it logs and moves on, because a
+   * malformed capability row costs one greyed-out console button, not a
+   * working platform.
+   */
+  onModuleInit(): void {
+    assertHubCapabilitiesValid();
+  }
+}
