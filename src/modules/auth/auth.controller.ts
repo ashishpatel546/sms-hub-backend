@@ -254,6 +254,36 @@ export class AuthController {
   }
 
   /**
+   * The explicit "continue without it" escape hatch: reachable only from the
+   * setup-only stub (see `JwtAuthGuard.TOTP_SETUP_ONLY_HANDLERS`), which is
+   * only handed out once the grace period has expired and the account still
+   * has not enrolled. Records the bypass — visible on the hub-users list —
+   * and hands back a real session in its place.
+   */
+  @Post('totp/skip')
+  @UseGuards(JwtAuthGuard, HubAccessGuard)
+  @MinAccess(HubAccessLevel.VIEW)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Continue without two-factor for now',
+    description:
+      'Self-service override for an account past its enrolment grace ' +
+      'period that still declines to enrol. Issues a full session and marks ' +
+      'the account as having explicitly bypassed 2FA — an admin can revoke ' +
+      'this from Hub users → Reset two-factor.',
+  })
+  totpSkip(
+    @Request() req: any,
+    @Headers('user-agent') userAgent: string,
+    @Headers('x-forwarded-for') forwardedFor: string,
+  ) {
+    return this.authService.skipTotpSetup(req.user.sub, {
+      deviceInfo: userAgent,
+      ipAddress: forwardedFor || req.ip,
+    });
+  }
+
+  /**
    * Public for the same reason `login` is: the caller has no session yet.
    * The body carries the password as well as the recovery code — a recovery
    * code is a *second* factor, not a standalone credential.
