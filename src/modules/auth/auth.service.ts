@@ -37,7 +37,22 @@ export class AuthService {
       // Says which console minted this. `sms-backend` accepts the same
       // signature, so the origin is worth stating rather than inferring.
       scope: 'platform',
+      // Lets any page decide whether to show the "set up 2FA" nag straight
+      // off the decoded token, the same way `isTotpSetupOnly` already works
+      // client-side — no extra round trip just to render a banner.
+      totpEnabled: !!user.totpEnabledAt,
     });
+  }
+
+  /**
+   * True for the window after account creation where a never-enrolled
+   * account still gets a full session instead of the setup-only stub. See
+   * `TOTP_GRACE_PERIOD_DAYS`.
+   */
+  private isTotpGracePeriodActive(user: HubUser): boolean {
+    const graceDays = this.globalConfig.env.TOTP_GRACE_PERIOD_DAYS;
+    const graceMs = graceDays * 24 * 60 * 60 * 1000;
+    return Date.now() - user.createdAt.getTime() < graceMs;
   }
 
   /**
@@ -90,16 +105,26 @@ export class AuthService {
     }
 
     if (!user.totpEnabledAt) {
-      // TOTP is mandatory, so an un-enrolled account gets a token that can do
-      // exactly one thing: enrol. Previously this was a full session plus a
+      // TOTP is mandatory, but not from the very first sign-in: a brand-new
+      // account (or one that has already exercised `totp/skip`) still gets a
+      // full session, so the console can nag with a dashboard banner instead
+      // of blocking day one. `issueSession` stamps `totpSetupRecommended` on
+      // the response so the frontend knows to show it.
+      if (user.totpBypassedAt || this.isTotpGracePeriodActive(user)) {
+        return this.issueSession(user, meta);
+      }
+
+      // Past the grace period, an un-enrolled account gets a token that can
+      // do exactly one thing: enrol (or explicitly opt out via
+      // `POST /auth/totp/skip`). Previously this was a full session plus a
       // `requireTotpSetup` flag, which made the mandate a frontend courtesy —
       // anyone calling the API directly simply ignored it. `JwtAuthGuard`
       // now enforces the restriction server-side, the same way it already
       // does for the change-password stub.
       //
       // No refresh token, for the same reason as the stub above: the session
-      // exists only until enrolment completes, and the user re-logs in with
-      // both factors afterwards.
+      // exists only until enrolment (or the skip) completes, and the user
+      // re-logs in, or is handed a full session by `skipTotpSetup`, from there.
       return {
         requireTotpSetup: true,
         access_token: this.jwtService.sign(
@@ -219,12 +244,31 @@ export class AuthService {
       role: user.role,
       accessLevel: user.accessLevel,
       email: user.email,
-      // Always false by construction: every path into this method has already
-      // established a second factor. Kept in the payload because the console
-      // reads it, and a field that silently disappears is worse than one that
-      // is honestly constant.
+      // False whenever a second factor is actually established. The one path
+      // that reaches here without one is the grace-period / bypass login
+      // above, which is exactly when the console should show its nag banner.
       requireTotpSetup: false,
+      totpSetupRecommended: !user.totpEnabledAt,
     };
+  }
+
+  /**
+   * Self-service override for an account past its enrolment grace period
+   * that still declines to enrol: reachable only from the setup-only stub
+   * (see `JwtAuthGuard.TOTP_SETUP_ONLY_HANDLERS`), it records the bypass —
+   * durable and visible on the hub-users list — and hands back a full
+   * session so the console can proceed straight to the dashboard.
+   *
+   * Idempotent: calling it again (e.g. a second un-enrolled login after the
+   * first bypass) just re-stamps the timestamp and issues another session.
+   */
+  async skipTotpSetup(userId: number, meta: SessionMeta = {}) {
+    const user = await this.hubUsersService.findById(userId);
+    if (!user.totpEnabledAt) {
+      await this.hubUsersService.markTotpBypassed(user.id);
+      user.totpBypassedAt = new Date();
+    }
+    return this.issueSession(user, meta);
   }
 
   /**
@@ -309,10 +353,17 @@ export class AuthService {
     }
 
     // Same reasoning as the first-login check: an account with no second
-    // factor has no real session either. This also closes the door behind an
-    // admin TOTP reset — any refresh handle minted before the reset stops
-    // being redeemable the moment enrolment is cleared.
-    if (!record.user.totpEnabledAt) {
+    // factor has no real session either — unless it is still inside its
+    // grace period, or has explicitly opted out via `totp/skip`, in which
+    // case a refresh should keep working exactly like the login that issued
+    // this token did. This also closes the door behind an admin TOTP reset:
+    // that clears `totpBypassedAt` too, so any refresh handle minted before
+    // the reset stops being redeemable the moment enrolment is cleared.
+    if (
+      !record.user.totpEnabledAt &&
+      !record.user.totpBypassedAt &&
+      !this.isTotpGracePeriodActive(record.user)
+    ) {
       await this.refreshTokenRepository.delete({ id: record.id });
       throw new UnauthorizedException(
         'Two-factor authentication setup required',

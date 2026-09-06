@@ -65,9 +65,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   /**
    * Handlers on `AuthController` an `isTotpSetupOnly` token may reach.
    *
-   * `totpStatus`/`totpSetup`/`totpEnable` are the enrolment flow itself; `me`
-   * is here so the console can render who it is enrolling. Note what is NOT
-   * here: `regenerateRecoveryCodes` (meaningless before enrolment) and
+   * `totpStatus`/`totpSetup`/`totpEnable` are the enrolment flow itself;
+   * `totpSkip` is the explicit "continue without it" escape hatch offered
+   * once the grace period has expired; `me` is here so the console can
+   * render who it is enrolling. Note what is NOT here:
+   * `regenerateRecoveryCodes` (meaningless before enrolment) and
    * `changePassword` (a password change is a separate errand, and the
    * first-login branch already runs ahead of this one).
    */
@@ -75,6 +77,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     'totpStatus',
     'totpSetup',
     'totpEnable',
+    'totpSkip',
     'me',
   ]);
 }

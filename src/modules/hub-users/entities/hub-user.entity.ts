@@ -141,4 +141,14 @@ export class HubUser {
     },
   })
   totpLastStep: number | null;
+
+  /**
+   * Set when an account past its TOTP grace period explicitly chose
+   * "continue without two-factor" on the enrolment screen instead of
+   * enrolling. Lets `login()`/`refreshSession()` keep treating the account as
+   * sessionable without a second factor — while leaving a durable, visible
+   * record (surfaced on the hub-users list) of who is running exposed.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  totpBypassedAt: Date | null;
 }

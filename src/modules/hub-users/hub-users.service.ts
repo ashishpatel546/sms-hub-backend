@@ -316,8 +316,11 @@ export class HubUsersService {
 
   /**
    * Clears a user's second factor entirely: secret, enrolment, replay
-   * watermark and every recovery code. The next login lands on the
-   * setup-only session and re-enrols from scratch.
+   * watermark, every recovery code, and any self-granted `totp/skip` bypass.
+   * The next login re-evaluates from scratch — the grace period if the
+   * account is young enough, the setup-only stub otherwise — rather than
+   * riding the old bypass forward. This is how an admin revokes a bypass an
+   * account chose for itself.
    *
    * Deliberately independent of {@link resetPassword}. Losing a phone and
    * forgetting a password are different accidents, and folding them together
@@ -331,14 +334,17 @@ export class HubUsersService {
   async resetTotp(id: number): Promise<{ success: true; totpEnabled: false }> {
     const user = await this.findById(id);
 
-    // A half-finished enrolment (secret, no `totpEnabledAt`) counts: it is
-    // still state the user has to be able to walk away from.
-    const hadTotpState = !!user.totpEnabledAt || !!user.totpSecret;
+    // A half-finished enrolment (secret, no `totpEnabledAt`) counts, and so
+    // does a bypass: either way there is state the user has to be able to
+    // walk away from, and a live session resting on it to revoke.
+    const hadTotpState =
+      !!user.totpEnabledAt || !!user.totpSecret || !!user.totpBypassedAt;
 
     await this.hubUsersRepository.update(id, {
       totpSecret: null,
       totpEnabledAt: null,
       totpLastStep: null,
+      totpBypassedAt: null,
     });
     await this.recoveryCodeRepository.delete({ hubUserId: id });
 
@@ -378,6 +384,16 @@ export class HubUsersService {
 
   async markLoggedIn(userId: number): Promise<void> {
     await this.hubUsersRepository.update(userId, { lastLoginAt: new Date() });
+  }
+
+  /**
+   * Records that an account past its TOTP grace period chose to continue
+   * without a second factor. See `AuthService.skipTotpSetup`.
+   */
+  async markTotpBypassed(userId: number): Promise<void> {
+    await this.hubUsersRepository.update(userId, {
+      totpBypassedAt: new Date(),
+    });
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────
