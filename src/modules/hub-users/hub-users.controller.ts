@@ -22,6 +22,7 @@ import {
   ResetHubUserPasswordDto,
   UpdateAccessLevelDto,
   UpdateHubUserDto,
+  UpdateTotpRequiredDto,
 } from './dto/hub-user.dto';
 
 /**
@@ -112,13 +113,32 @@ export class HubUsersController {
     description:
       'For the operator who lost both their phone and their recovery codes. ' +
       'Clears the secret, the enrolment, the replay watermark and every ' +
-      'recovery code, then revokes their sessions; the next login lands on ' +
-      'the setup-only session and re-enrols. Idempotent — resetting a user ' +
-      'who was never enrolled succeeds and changes nothing. An admin may ' +
-      'reset anyone, including themselves.',
+      'recovery code, then revokes their sessions. A user with two-factor ' +
+      'required must re-enrol at their next sign-in; an optional one signs ' +
+      'in with the password only until they choose to enrol again. ' +
+      'Idempotent — resetting a user who was never enrolled succeeds and ' +
+      'changes nothing. An admin may reset anyone, including themselves.',
   })
   resetTotp(@Param('id', ParseIntPipe) id: number) {
     return this.hubUsersService.resetTotp(id);
+  }
+
+  @Patch(':id/totp-required')
+  @ApiOperation({
+    summary: 'Require (or stop requiring) two-factor for a hub user',
+    description:
+      'Two-factor is optional by default. `required: true` forces it: a ' +
+      'user who has not enrolled must enrol at their next sign-in (their ' +
+      'refresh handles are revoked so that comes sooner rather than later), ' +
+      'and cannot turn it off afterwards. An already-enrolled user notices ' +
+      'nothing. `required: false` returns them to optional and leaves any ' +
+      'existing enrolment as it is.',
+  })
+  setTotpRequired(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpdateTotpRequiredDto,
+  ) {
+    return this.hubUsersService.setTotpRequired(id, body.required);
   }
 
   @Delete(':id')

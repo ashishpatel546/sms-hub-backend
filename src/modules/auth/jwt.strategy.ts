@@ -31,9 +31,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // having on hand.
       scope: payload.scope,
       isChangePasswordOnly: !!payload.isChangePasswordOnly,
-      // Same shape of restriction as `isChangePasswordOnly`: a token minted
-      // for an account that has never enrolled in TOTP, good only for the
-      // enrolment endpoints. `JwtAuthGuard` owns the allowlist.
+      // Same shape of restriction as `isChangePasswordOnly`: minted for an
+      // account an admin requires to use TOTP but which has not enrolled yet,
+      // good only for the enrolment endpoints. `JwtAuthGuard` owns the
+      // allowlist.
       isTotpSetupOnly: !!payload.isTotpSetupOnly,
     };
   }

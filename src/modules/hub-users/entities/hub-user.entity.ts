@@ -143,11 +143,23 @@ export class HubUser {
   totpLastStep: number | null;
 
   /**
-   * Set when an account past its TOTP grace period explicitly chose
-   * "continue without two-factor" on the enrolment screen instead of
-   * enrolling. Lets `login()`/`refreshSession()` keep treating the account as
-   * sessionable without a second factor — while leaving a durable, visible
-   * record (surfaced on the hub-users list) of who is running exposed.
+   * An administrator requires this account to use two-factor. Defaults to
+   * false: two-factor is optional and the user's own choice. Only an ADMIN sets
+   * it (`PATCH /hub-users/:id/totp-required`).
+   *
+   * While true and the account has not enrolled, login hands back the
+   * setup-only token instead of a session, and the user cannot turn
+   * two-factor off once it is on. Turning the flag off returns the account to
+   * optional and leaves any existing enrolment alone.
+   */
+  @Column({ default: false })
+  totpRequired: boolean;
+
+  /**
+   * LEGACY. Written by the removed "continue without two-factor" escape hatch
+   * from when enrolment was mandatory after a grace period. Two-factor is now
+   * optional, so nothing sets or reads this any more; the column is kept
+   * (no migration) and is cleared by `resetTotp` / `TotpService.disable`.
    */
   @Column({ type: 'timestamp', nullable: true })
   totpBypassedAt: Date | null;

@@ -27,6 +27,26 @@ export class RegenerateRecoveryCodesDto {
 }
 
 /**
+ * Turning two-factor off is a downgrade of the account, so it needs both
+ * factors again — the password and a live authenticator code — not just a
+ * session.
+ */
+export class DisableTotpDto {
+  @ApiProperty({ description: 'The account password' })
+  @IsString()
+  @IsNotEmpty()
+  password: string;
+
+  @ApiProperty({
+    example: '123456',
+    description: 'A current code from the enrolled authenticator app',
+  })
+  @IsString()
+  @Length(6, 6)
+  code: string;
+}
+
+/**
  * Recovery is a *second* factor, so it carries the first one with it —
  * the credentials the login form already holds. Without them this endpoint
  * would turn a stolen recovery code into a password-free login.

@@ -69,18 +69,6 @@ export class EnvDto {
   @IsOptional()
   JWT_REFRESH_EXPIRES_IN: string = '30d';
 
-  /**
-   * How many days a never-enrolled account may still log in with a full
-   * session instead of the enrolment-only stub. Meant to soften the very
-   * first sign-in, not to weaken the mandate — once expired, `login()` falls
-   * back to the setup-only token until the account enrols or explicitly
-   * calls `POST /auth/totp/skip`.
-   */
-  @IsNumber()
-  @Transform(({ value }) => parseInt(value, 10))
-  @IsOptional()
-  TOTP_GRACE_PERIOD_DAYS: number = 7;
-
   @IsString()
   @IsOptional()
   WHITELIST_TRUSTED_URLS: string = '*';

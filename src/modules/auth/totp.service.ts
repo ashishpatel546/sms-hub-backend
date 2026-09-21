@@ -122,6 +122,8 @@ export class TotpService {
       enabled: !!user.totpEnabledAt,
       /** A secret has been generated but never confirmed with a code. */
       pending: !user.totpEnabledAt && !!user.totpSecret,
+      /** An administrator requires two-factor for this account. */
+      required: user.totpRequired,
       recoveryCodesRemaining: user.totpEnabledAt
         ? await this.countUnusedRecoveryCodes(userId)
         : 0,
@@ -186,6 +188,70 @@ export class TotpService {
     await this.verifyCode(user, code);
 
     return { recoveryCodes: await this.issueRecoveryCodes(userId) };
+  }
+
+  /**
+   * Turns two-factor off for the caller: drops the secret, the enrolment
+   * stamp, the replay watermark and every recovery code, so the account is
+   * back to a plain password login and a later enrolment starts from scratch.
+   *
+   * Two proofs, not one. A session alone must not be able to strip the second
+   * factor (a borrowed unlocked console would otherwise be a permanent
+   * downgrade of the account), so the caller supplies both the current
+   * password and a live code from the authenticator. Password is checked
+   * first so a wrong password does not burn a good code's time step.
+   *
+   * Failures are 400s, not the 401s `verifyCode` throws: the console's API
+   * client reads any 401 as "session expired" and silently refreshes and
+   * retries, which would replay the code and swallow the real message.
+   *
+   * Refused outright when an admin has made two-factor required for the
+   * account — that is the admin's decision to lift (`PATCH
+   * /hub-users/:id/totp-required`), not the user's.
+   *
+   * Lost the authenticator? That is the admin's `POST /hub-users/:id/reset-totp`.
+   */
+  async disable(userId: number, password: string, code: string) {
+    const user = await this.hubUserRepository.findOne({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (!user.totpEnabledAt) {
+      throw new BadRequestException(
+        'Two-factor authentication is not enabled for this account',
+      );
+    }
+
+    if (user.totpRequired) {
+      throw new BadRequestException(
+        'Two-factor is required for your account by an administrator',
+      );
+    }
+
+    if (!(await bcrypt.compare(password, user.passwordHash))) {
+      throw new BadRequestException('Password is incorrect');
+    }
+
+    try {
+      await this.verifyCode(user, code);
+    } catch (err) {
+      if (err instanceof UnauthorizedException) {
+        throw new BadRequestException(err.message);
+      }
+      throw err;
+    }
+
+    await this.hubUserRepository.update(userId, {
+      totpSecret: null,
+      totpEnabledAt: null,
+      totpLastStep: null,
+      totpBypassedAt: null,
+    });
+    await this.recoveryCodeRepository.delete({ hubUserId: userId });
+
+    return { success: true, totpEnabled: false };
   }
 
   /**
