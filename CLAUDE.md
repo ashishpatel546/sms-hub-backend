@@ -50,21 +50,29 @@ don't assume `npm test` exists.
 straight from `.env`. In non-local `NODE_ENV`, both `main.ts` bootstrap and `data-source.ts` (for
 migrations) pull params from AWS SSM Parameter Store at `/sms-hub/<NODE_ENV>/` before anything else runs.
 
+## Ports: local dev vs production (read before touching any port)
+
+- **The ports in this file are local-dev only.** On this machine the whole school stack lives in the 4000 range, set by each app's local `.env` (gitignored): sms-frontend `4000`, sms-hub-frontend `4001`, sms-backend `4010`, sms-hub-backend `4011`; school-ai stays on `8001`. Nothing runs on 3000 or 5000 locally. The workspace-level `helping-scripts/start.sh` and `stop.sh` (a sibling folder of the repos, not part of this repo) start and stop everything and read these ports from the `.env` files.
+- **Production and staging use different ports and hostnames.** They come from the deploy pipeline (`.github/workflows/`, `ecosystem.config.js`, AWS SSM parameters and the proxy on the EC2 host) — e.g. `sms-hub-backend-production` runs on port 3010 and `-development` on 3011 (see Deployment below and `DEPLOYMENT_VARIABLES.md`). Never infer a production port from the local map, or the local map from production.
+- **Never change production to match local.** A local port change means editing the local `.env` and `~/.cloudflared/config.yml` only. Do not edit deploy workflows, `ecosystem.config.js`, Dockerfiles or SSM parameters for this purpose, and do not touch AWS (SSM, RDS, EC2) or any production/staging environment unless the user explicitly asks for that specific action in the current conversation.
+- **The production and staging DB tunnels are off-limits by default.** `db-ssm-prod` (`localhost:15433`) and `db-ssm` (`localhost:15432`) forward to the production and staging databases. Do not run migrations, writes or ad-hoc queries through them unless the user explicitly asks.
+
 ## Local dev over Cloudflare tunnel (mobile testing)
 
 Local dev is exposed to the internet through a named Cloudflare tunnel (`home-app`) so the stack can be
 tested on real phones/tablets, not just a desktop browser. Config lives at `~/.cloudflared/config.yml`;
-the PowerShell profile provides `c-tunnel` (run the tunnel) and `cloudflared-config` (open the config in
+the shell profile (`~/.zshrc`) provides `c-tunnel` (run the tunnel) and `cloudflared-config` (open the config in
 VS Code). Ingress map (specific hostnames must stay ABOVE the `*.appme.in` wildcard — cloudflared matches
 in order):
 
 | Hostname | Local service |
 |---|---|
-| `hub-api.appme.in` | **sms-hub-backend (this API)** — `localhost:5001` |
-| `hub.appme.in` | sms-hub-frontend — `localhost:3001` |
-| `myapp.appme.in` | sms-backend API — `localhost:5000` |
-| `ai-api.appme.in` | school-ai — `localhost:8001` (long keep-alive for slow AI generations) |
-| `*.appme.in` wildcard (e.g. `edusphere.appme.in`), also `myrealapp.appme.in` | sms-frontend — `localhost:3000` (subdomain doubles as the tenant slug) |
+| `hub-api.appme.in` | **sms-hub-backend (this API)** — `localhost:4011` |
+| `hub.appme.in` | sms-hub-frontend — `localhost:4001` |
+| `myapp.appme.in` | sms-backend API — `localhost:4010` |
+| `*.appme.in` wildcard (e.g. `edusphere.appme.in`), also `myrealapp.appme.in` | sms-frontend — `localhost:4000` (subdomain doubles as the tenant slug) |
+
+`school-ai` (`localhost:8001`) is **not** in the current `~/.cloudflared/config.yml`: locally it is reached directly on `localhost:8001` (`AI_API_URL`). Add an ingress rule above the wildcard only if it must be reachable from a phone.
 
 The frontends are installable PWAs required to be responsive on mobile, tablet, laptop, and large
 screens; the responsive requirement itself is enforced in the frontend repos.

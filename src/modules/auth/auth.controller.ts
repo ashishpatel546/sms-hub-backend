@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Post,
   Get,
@@ -15,6 +16,7 @@ import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import {
+  DisableTotpDto,
   EnableTotpDto,
   RegenerateRecoveryCodesDto,
   TotpRecoveryDto,
@@ -30,8 +32,8 @@ import { capabilitiesFor } from './hub-capabilities';
  * Access levels here are all VIEW, and deliberately so: every authenticated
  * route on this controller acts on the caller's *own* account — their
  * sessions, their password, their second factor. Gating self-service behind
- * EDIT would leave a VIEW user unable to log out or enrol in the TOTP the
- * platform requires of them.
+ * EDIT would leave a VIEW user unable to log out, change their password or
+ * manage their own two-factor.
  *
  * They are stated rather than left off because `HubAccessGuard` fails closed
  * on a missing or unrecognised `access` claim, so `@MinAccess(VIEW)` is a
@@ -52,12 +54,13 @@ export class AuthController {
     summary: 'Login',
     description:
       'Password first, then the second factor, then everything else. ' +
-      'Enrolled account with no `totpCode` → `{ requireTotp: true }` and no ' +
-      'tokens. Account the admin has reset → `{ requirePasswordChange: true }` ' +
-      'with a change-password-only token, but only AFTER TOTP has been ' +
-      'satisfied. Never-enrolled account → `{ requireTotpSetup: true }` with a ' +
-      '15-minute setup-only token and no refresh token. Otherwise a full ' +
-      'session.',
+      'Two-factor is optional by default: an enrolled account with no ' +
+      '`totpCode` gets `{ requireTotp: true }` and no tokens. Account the ' +
+      'admin has reset → `{ requirePasswordChange: true }` with a ' +
+      'change-password-only token, but only AFTER TOTP has been satisfied ' +
+      '(when enrolled). Account an admin has flagged `totpRequired` that ' +
+      'has not enrolled → `{ requireTotpSetup: true }` with a 15-minute ' +
+      'setup-only token and no refresh token. Otherwise a full session.',
   })
   login(
     @Body() body: LoginDto,
@@ -177,18 +180,47 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, HubAccessGuard)
   @MinAccess(HubAccessLevel.VIEW)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Change password on first login' })
-  changePassword(@Request() req: any, @Body() body: ChangePasswordDto) {
-    return this.authService.changePassword(req.user.sub, body.password);
+  @ApiOperation({
+    summary: 'Change password',
+    description:
+      'Two callers share this route. The change-password-only token from ' +
+      'first sign-in / an admin reset sets a new `password` outright and ' +
+      'returns `{ success }`. A normal signed-in session must also send ' +
+      '`currentPassword`; every session is then revoked and a fresh ' +
+      '`{ success, access_token, refresh_token }` pair is returned for the ' +
+      'caller, so only their other devices are signed out.',
+  })
+  changePassword(
+    @Request() req: any,
+    @Body() body: ChangePasswordDto,
+    @Headers('user-agent') userAgent: string,
+    @Headers('x-forwarded-for') forwardedFor: string,
+  ) {
+    if (req.user.isChangePasswordOnly) {
+      return this.authService.changePassword(req.user.sub, body.password);
+    }
+    if (!body.currentPassword) {
+      throw new BadRequestException('Current password is required');
+    }
+    return this.authService.changePasswordWithCurrent(
+      req.user.sub,
+      body.currentPassword,
+      body.password,
+      { deviceInfo: userAgent, ipAddress: forwardedFor || req.ip },
+    );
   }
 
   // ── TOTP ──────────────────────────────────────────────────────────────────
 
   /**
-   * Enrolment happens on the setup-only session `login()` hands an
-   * un-enrolled account: a 15-minute token, no refresh token, and — enforced
-   * in `JwtAuthGuard`, not merely advertised via `requireTotpSetup` — good
-   * for nothing but the three routes below plus `me`.
+   * Two-factor is opt-in unless an admin has flagged the account
+   * `totpRequired`. These routes are how a signed-in user turns it on
+   * (`setup` + `enable`), tops up its recovery codes, and — when optional —
+   * turns it off again (`disable`).
+   *
+   * A required, un-enrolled account enrols on the 15-minute setup-only token
+   * `login()` hands it: enforced in `JwtAuthGuard`, and good for nothing but
+   * `status`/`setup`/`enable` plus `me`.
    */
   @Get('totp/status')
   @UseGuards(JwtAuthGuard, HubAccessGuard)
@@ -251,6 +283,25 @@ export class AuthController {
     @Body() body: RegenerateRecoveryCodesDto,
   ) {
     return this.totpService.regenerateRecoveryCodes(req.user.sub, body.code);
+  }
+
+  /**
+   * Turns two-factor off. Needs the password AND a live authenticator code,
+   * for the same reason regeneration needs a code: a session alone must not
+   * be able to downgrade the account. Clears the secret and every recovery
+   * code, so a later enrolment starts fresh. 400 when an admin requires
+   * two-factor for the account.
+   */
+  @Post('totp/disable')
+  @UseGuards(JwtAuthGuard, HubAccessGuard)
+  @MinAccess(HubAccessLevel.VIEW)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Turn two-factor off (password + current authenticator code). Refused for accounts an admin requires it for',
+  })
+  totpDisable(@Request() req: any, @Body() body: DisableTotpDto) {
+    return this.totpService.disable(req.user.sub, body.password, body.code);
   }
 
   /**

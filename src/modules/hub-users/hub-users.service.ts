@@ -100,6 +100,7 @@ export class HubUsersService {
     mobile?: string | null;
     accessLevel?: HubAccessLevel;
     createdById?: number | null;
+    totpRequired?: boolean;
   }): Promise<HubUser> {
     const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
     const user = this.hubUsersRepository.create({
@@ -110,6 +111,7 @@ export class HubUsersService {
       mobile: data.mobile ?? null,
       accessLevel: data.accessLevel ?? HubAccessLevel.VIEW,
       createdById: data.createdById ?? null,
+      totpRequired: data.totpRequired ?? false,
       isFirstLogin: true,
     });
     return this.hubUsersRepository.save(user);
@@ -134,6 +136,7 @@ export class HubUsersService {
       mobile?: string | null;
       accessLevel?: HubAccessLevel;
       passwordMode?: PasswordMode;
+      totpRequired?: boolean;
     },
     actorId: number,
   ): Promise<
@@ -170,6 +173,7 @@ export class HubUsersService {
       mobile,
       accessLevel: data.accessLevel ?? HubAccessLevel.VIEW,
       createdById: actorId,
+      totpRequired: data.totpRequired ?? false,
     });
 
     return {
@@ -316,8 +320,10 @@ export class HubUsersService {
 
   /**
    * Clears a user's second factor entirely: secret, enrolment, replay
-   * watermark and every recovery code. The next login lands on the
-   * setup-only session and re-enrols from scratch.
+   * watermark, every recovery code, and the legacy `totpBypassedAt` stamp.
+   * `totpRequired` is left alone: a required user must re-enrol at their next
+   * sign-in, an optional one goes back to a plain password login and can
+   * enrol again from Security whenever they like.
    *
    * Deliberately independent of {@link resetPassword}. Losing a phone and
    * forgetting a password are different accidents, and folding them together
@@ -331,14 +337,17 @@ export class HubUsersService {
   async resetTotp(id: number): Promise<{ success: true; totpEnabled: false }> {
     const user = await this.findById(id);
 
-    // A half-finished enrolment (secret, no `totpEnabledAt`) counts: it is
-    // still state the user has to be able to walk away from.
-    const hadTotpState = !!user.totpEnabledAt || !!user.totpSecret;
+    // A half-finished enrolment (secret, no `totpEnabledAt`) counts, and so
+    // does a legacy bypass stamp: either way there is state to clear, and a
+    // live session possibly resting on it to revoke.
+    const hadTotpState =
+      !!user.totpEnabledAt || !!user.totpSecret || !!user.totpBypassedAt;
 
     await this.hubUsersRepository.update(id, {
       totpSecret: null,
       totpEnabledAt: null,
       totpLastStep: null,
+      totpBypassedAt: null,
     });
     await this.recoveryCodeRepository.delete({ hubUserId: id });
 
@@ -350,6 +359,33 @@ export class HubUsersService {
     }
 
     return { success: true, totpEnabled: false };
+  }
+
+  /**
+   * Sets whether two-factor is mandatory for one account.
+   *
+   * ON: an already-enrolled user notices nothing. A user who has not enrolled
+   * is sent through enrolment at their next login, and their refresh handles
+   * are revoked so that happens as soon as their current access token lapses
+   * (the access JWT is stateless, so a token already issued keeps working
+   * until it expires — `JWT_EXPIRES_IN`).
+   *
+   * OFF: back to optional. Any existing enrolment is kept as it is; the user
+   * may now turn it off themselves.
+   */
+  async setTotpRequired(id: number, required: boolean): Promise<PublicHubUser> {
+    const user = await this.findById(id);
+
+    if (user.totpRequired !== required) {
+      await this.hubUsersRepository.update(id, { totpRequired: required });
+      user.totpRequired = required;
+
+      if (required && !user.totpEnabledAt) {
+        await this.revokeSessions(id);
+      }
+    }
+
+    return HubUsersService.toPublic(user);
   }
 
   async remove(id: number, actorId: number): Promise<{ success: true }> {

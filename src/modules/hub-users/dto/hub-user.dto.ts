@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsIn,
@@ -78,6 +79,15 @@ export class CreateHubUserDto {
   @IsOptional()
   @IsIn(PASSWORD_MODES)
   passwordMode?: PasswordMode;
+
+  /**
+   * Force two-factor for this account from its first sign-in. Defaults to
+   * false — optional, the user's own choice.
+   */
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  totpRequired?: boolean;
 }
 
 /** Body for POST /hub-users/:id/reset-password. */
@@ -111,4 +121,14 @@ export class UpdateAccessLevelDto {
   @ApiProperty({ enum: HubAccessLevel })
   @IsEnum(HubAccessLevel)
   accessLevel: HubAccessLevel;
+}
+
+/** Body for PATCH /hub-users/:id/totp-required. */
+export class UpdateTotpRequiredDto {
+  @ApiProperty({
+    description:
+      'true = the user must use two-factor; false = optional (their choice)',
+  })
+  @IsBoolean()
+  required: boolean;
 }

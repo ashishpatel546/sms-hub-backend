@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, MoreThan, Repository } from 'typeorm';
@@ -44,10 +48,18 @@ export class AuthService {
    * The login state machine, in the order the factors actually matter:
    *
    *   1. password (and account status)
-   *   2. TOTP, whenever the account is enrolled
+   *   2. TOTP, only when the account has enrolled in it
    *   3. forced password change, if the admin reset this account
-   *   4. TOTP enrolment, if the account has never set it up
+   *   4. TOTP enrolment, only if an admin has made it required for this
+   *      account (`totpRequired`) and it has not enrolled
    *   5. full session
+   *
+   * Two-factor is OPTIONAL by default: an account that has never enrolled (or
+   * has since turned it off) goes straight from the password to a full
+   * session. Login asks for a code only when `totpEnabledAt` is set, which
+   * the user does themselves from Security. The one exception is an account
+   * an admin has flagged `totpRequired`: until it enrols it gets a setup-only
+   * token instead of a session. There is no grace period and no skip.
    *
    * The second factor deliberately sits ABOVE the first-login branch. An
    * admin password reset sets `isFirstLogin`, and the bootstrap password is
@@ -89,17 +101,13 @@ export class AuthService {
       return this.changePasswordStub(user);
     }
 
-    if (!user.totpEnabledAt) {
-      // TOTP is mandatory, so an un-enrolled account gets a token that can do
-      // exactly one thing: enrol. Previously this was a full session plus a
-      // `requireTotpSetup` flag, which made the mandate a frontend courtesy —
-      // anyone calling the API directly simply ignored it. `JwtAuthGuard`
-      // now enforces the restriction server-side, the same way it already
-      // does for the change-password stub.
+    if (user.totpRequired && !user.totpEnabledAt) {
+      // An admin requires two-factor and this account has none. Hand back a
+      // token that can do exactly one thing — enrol — enforced server-side in
+      // `JwtAuthGuard`, so a direct API caller cannot ignore the flag.
       //
-      // No refresh token, for the same reason as the stub above: the session
-      // exists only until enrolment completes, and the user re-logs in with
-      // both factors afterwards.
+      // No refresh token: the stub exists only until enrolment completes, and
+      // the user then signs in again with both factors for a real session.
       return {
         requireTotpSetup: true,
         access_token: this.jwtService.sign(
@@ -219,11 +227,6 @@ export class AuthService {
       role: user.role,
       accessLevel: user.accessLevel,
       email: user.email,
-      // Always false by construction: every path into this method has already
-      // established a second factor. Kept in the payload because the console
-      // reads it, and a field that silently disappears is worse than one that
-      // is honestly constant.
-      requireTotpSetup: false,
     };
   }
 
@@ -308,11 +311,11 @@ export class AuthService {
       throw new UnauthorizedException('Password change required');
     }
 
-    // Same reasoning as the first-login check: an account with no second
-    // factor has no real session either. This also closes the door behind an
-    // admin TOTP reset — any refresh handle minted before the reset stops
-    // being redeemable the moment enrolment is cleared.
-    if (!record.user.totpEnabledAt) {
+    // An admin can make two-factor required while a session is already
+    // open. Access tokens are stateless, so this is where it bites: the next
+    // refresh is refused and the user signs in again, which lands them on
+    // enrolment. (Enrolled users, and everyone while the flag is off, pass.)
+    if (record.user.totpRequired && !record.user.totpEnabledAt) {
       await this.refreshTokenRepository.delete({ id: record.id });
       throw new UnauthorizedException(
         'Two-factor authentication setup required',
@@ -388,11 +391,61 @@ export class AuthService {
     });
   }
 
+  /**
+   * The forced first-login / admin-reset change. No current password is asked
+   * for: the caller holds a change-password-only stub, which `login()` only
+   * hands out after the password (and second factor) have just been proved.
+   */
   async changePassword(userId: number, newPassword: string) {
     const newPasswordHash = await bcrypt.hash(newPassword, 10);
     await this.hubUsersService.updatePassword(userId, newPasswordHash);
     // A new password invalidates every session minted under the old one.
     await this.logoutAll(userId);
     return { success: true };
+  }
+
+  /**
+   * Self-service change for a signed-in user. A live session alone is not
+   * enough: whoever is sitting at an unlocked console (or holds a stolen
+   * access token) must not be able to lock the owner out, so the current
+   * password has to be proved again.
+   *
+   * Every session minted under the old password is revoked — this one
+   * included, because the caller's refresh token is not knowable from the
+   * access token. The caller is handed a fresh access + refresh pair in the
+   * same response, so from their side nothing happens; every OTHER device is
+   * signed out.
+   */
+  async changePasswordWithCurrent(
+    userId: number,
+    currentPassword: string,
+    newPassword: string,
+    meta: SessionMeta = {},
+  ) {
+    const user = await this.hubUsersService.findById(userId);
+
+    const currentMatches = await bcrypt.compare(
+      currentPassword,
+      user.passwordHash,
+    );
+    if (!currentMatches) {
+      // 400, not 401: `lib/api.ts` treats any 401 as an expired session and
+      // signs the user out, which is the wrong outcome for a typo.
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    if (currentPassword === newPassword) {
+      throw new BadRequestException(
+        'New password must be different from the current password',
+      );
+    }
+
+    await this.changePassword(userId, newPassword);
+
+    return {
+      success: true,
+      access_token: this.accessTokenFor(user),
+      refresh_token: await this.createRefreshToken(userId, meta),
+    };
   }
 }
